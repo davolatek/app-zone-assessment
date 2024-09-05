@@ -8,9 +8,6 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.DESedeKeySpec;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.text.SimpleDateFormat;
 import java.util.Base64;
@@ -88,43 +85,10 @@ public class IsoServiceImpl implements IsoService {
     public String processKeyExchangeResponse(ISOMsg keyExchangeResponse) throws Exception {
 
         String encryptedZpk = keyExchangeResponse.getString(53);
-        String zmkPartA = "63E4880A2D502DD8";
-        String zmkPartB = "E835C68DD8061BBB";
+
 
         if (encryptedZpk != null) {
-            String zpkPartA = encryptedZpk.substring(0, 16);
-
-            String zpkPartB = encryptedZpk.substring(16, 32);
-
-            System.out.println("ZPK Part A::: " + zpkPartA);
-            System.out.println("ZPK Part B::: " + zpkPartB);
-
-            String xorValue1 = ISOUtil.hexor("A6", zmkPartB.substring(0, 2));
-
-            System.out.println("Xor Value 1:::"+xorValue1);
-
-            String completeVariantedZMK1 =  zmkPartA+zmkPartB.replace("E8", xorValue1);
-
-            // decrypt with 3des encryption algorithm for a varianted zmk part B
-            byte[] decryptedValue1 = new PinBlockUtilities().decrypt3DESECB(zpkPartA.getBytes(), completeVariantedZMK1.getBytes());
-
-            String decVal1 = new PinBlockUtilities().byteArrayToHexString(decryptedValue1).toUpperCase();
-            System.out.println("Decrypted Value 1::: "+decVal1);
-
-            // do for 5A
-            String xorValue2 = ISOUtil.hexor("5A", zmkPartB.substring(0, 2));
-
-            System.out.println("Xor Value 2:::"+xorValue2);
-
-            // decrypt with 3des encryption algorithm for a varianted zmk part B
-            String completedVariantedZMK2 = zmkPartA+zmkPartB.replace("E8", xorValue2);
-            byte[] decryptedValue2 = new PinBlockUtilities().decrypt3DESECB(zpkPartB.getBytes(), completedVariantedZMK2.getBytes());
-
-            String decVal2 = new PinBlockUtilities().byteArrayToHexString(decryptedValue2).toUpperCase();
-            System.out.println("Decrypted Value 2::: "+decVal2);
-            String clearZPK =decVal1.toUpperCase().substring(0, 16)+decVal2.toUpperCase().substring(16, 32);
-            KeyStorage.storeKey("decryptedKeK", clearZPK);
-
+            decryptZpk(encryptedZpk);
 
         }
 
@@ -156,5 +120,27 @@ public class IsoServiceImpl implements IsoService {
     }
 
 
+    public void decryptZpk(String encryptedZpk) {
+        String zpk16A = encryptedZpk.substring(0, 16);
+        String zpk16B = encryptedZpk.substring(16, 32);
+
+        String zmk16A = "63E4880A2D502DD8";
+        String zmk16B = "E835C68DD8061BBB";
+        String variantZmKA = zmk16B.substring(0, 2);
+        String partA = zmk16B.substring(2, 16);
+
+        String variantZmkBOne = ISOUtil.hexor("A6", variantZmKA) + partA;
+        String newZmk = zmk16A + variantZmkBOne;
+        String clearZpkA = new PinBlockUtilities().byteArrayToHexString(new PinBlockUtilities().decrypt3DESECB(new PinBlockUtilities().hexStringToByteArray(newZmk), new PinBlockUtilities().hexStringToByteArray(zpk16A)));
+
+
+        String variantZmkBTwo = ISOUtil.hexor("5A", variantZmKA) + partA;
+        String newZmk2 = zmk16A + variantZmkBTwo;
+        String clearZpkB = new PinBlockUtilities().byteArrayToHexString(new PinBlockUtilities().decrypt3DESECB(new PinBlockUtilities().hexStringToByteArray(newZmk2), new PinBlockUtilities().hexStringToByteArray(zpk16B)));
+
+        String clearZpk = clearZpkA.substring(0, 16) + clearZpkB.substring(0, 16);
+        System.out.print("Clear ZPK Stored::: " + clearZpk.toUpperCase());
+        KeyStorage.storeKey("decryptedKeK", clearZpk.toUpperCase());
+    }
 
 }
